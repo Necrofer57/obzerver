@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="paper">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#fbf9f5" id="metaThemeColor" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Obzerver" />
+  <title>Obzerver — Bağlam Odaklı İngilizce EPUB Okuyucu</title>
+  <!-- Google Fonts for optimal reading typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;0,7..72,600;1,7..72,400&display=swap" rel="stylesheet">
+  <!-- JSZip for extracting EPUB archives in the browser -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <!-- Import map for official @google/genai SDK -->
+  <script type="importmap">
+    {
+      "imports": {
+        "@google/genai": "https://esm.run/@google/genai@2.29.1"
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="styles.css?v=3" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Top Navigation Bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <button id="toggleSidebarBtn" class="icon-btn" title="İçindekiler ve Kitaplık" aria-label="Menüyü Aç/Kapat">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="15" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+        <div class="brand">
+          <span class="brand-logo">👁️‍🗨️</span>
+          <div class="brand-text">
+            <h1 class="brand-title">Obzerver</h1>
+            <span class="brand-subtitle" id="currentBookTitle">Bağlam Odaklı EPUB Okuyucu</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="topbar-center">
+        <!-- Chapter navigation bar when book is loaded -->
+        <div class="chapter-nav" id="chapterNav" hidden>
+          <button id="prevChapterBtn" class="nav-pill-btn" title="Önceki Bölüm" aria-label="Önceki Bölüm">
+            ← <span class="hide-on-mobile">Önceki</span>
+          </button>
+          <span id="chapterIndicator" class="chapter-indicator">1 / 1</span>
+          <button id="nextChapterBtn" class="nav-pill-btn" title="Sonraki Bölüm" aria-label="Sonraki Bölüm">
+            <span class="hide-on-mobile">Sonraki</span> →
+          </button>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <label for="epubFileInput" class="primary-btn upload-btn" title="Cihazınızdan .epub dosyası yükleyin">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <span class="upload-btn-label">EPUB Aç</span>
+          <input type="file" id="epubFileInput" accept=".epub,application/epub+zip" hidden />
+        </label>
+
+        <!-- Typography & Theme Controls -->
+        <div class="appearance-controls">
+          <button id="fontDecreaseBtn" class="icon-btn text-btn" title="Yazıyı Küçült">A-</button>
+          <button id="fontIncreaseBtn" class="icon-btn text-btn" title="Yazıyı Büyüt">A+</button>
+          <div class="theme-switcher" role="group" aria-label="Okuma Teması">
+            <button class="theme-dot paper active" data-theme-val="paper" title="Kağıt Teması"></button>
+            <button class="theme-dot sepia" data-theme-val="sepia" title="Sepya Teması"></button>
+            <button class="theme-dot dark" data-theme-val="dark" title="Gece Teması"></button>
+          </div>
+        </div>
+
+        <button id="openVocabModalBtn" class="secondary-btn vocab-trigger-btn" title="Kaydedilen Kelimeler ve Kart Çalışması">
+          <span>🗂️</span>
+          <span class="hide-on-mobile">Kelimelerim</span>
+          <span id="vocabCountBadge" class="badge">0</span>
+        </button>
+
+        <button id="openSettingsModalBtn" class="icon-btn" title="Çeviri ve Görünüm Ayarları" aria-label="Ayarlar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Mobile Backdrop for Sidebar Drawer -->
+    <div class="sidebar-backdrop" id="sidebarBackdrop" hidden></div>
+
+    <!-- Main Workspace -->
+    <div class="workspace" id="workspace">
+      <!-- Left Sidebar / Mobile Slide-Over Drawer: Library & Table of Contents -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-mobile-header">
+          <strong>📚 Kitaplık &amp; Bölümler</strong>
+          <button id="closeSidebarMobileBtn" class="icon-btn" aria-label="Menüyü Kapat">✕</button>
+        </div>
+        <div class="sidebar-tabs">
+          <button class="sidebar-tab active" data-tab="toc">İçindekiler</button>
+          <button class="sidebar-tab" data-tab="library">Kitaplığım</button>
+        </div>
+
+        <!-- Tab 1: Table of Contents -->
+        <div class="sidebar-content" id="tocPanel">
+          <div class="book-meta-card" id="bookMetaCard" hidden>
+            <h3 id="metaTitle">Kitap Başlığı</h3>
+            <p id="metaAuthor">Yazar</p>
+          </div>
+          <ul class="toc-list" id="tocList">
+            <li class="empty-hint">Bir EPUB kitabı açtığınızda bölümler burada listelenir.</li>
+          </ul>
+        </div>
+
+        <!-- Tab 2: Saved Books Library -->
+        <div class="sidebar-content" id="libraryPanel" hidden>
+          <div class="library-section">
+            <h4 class="section-label">Yüklediğim Kitaplar</h4>
+            <ul class="library-list" id="userLibraryList">
+              <li class="empty-hint">Henüz kitap yüklemediniz.</li>
+            </ul>
+          </div>
+          <div class="library-section">
+            <h4 class="section-label">Hemen Denemek İçin Örnek Kitaplar</h4>
+            <div class="sample-books">
+              <button class="sample-book-card" data-sample="beginner">
+                <span class="level-tag beginner">A1-A2 Başlangıç</span>
+                <strong>The Mysterious Key &amp; Short Stories</strong>
+                <small>Günlük kelimeler ve akıcı diyaloglarla 3 kısa hikaye</small>
+              </button>
+              <button class="sample-book-card" data-sample="intermediate">
+                <span class="level-tag intermediate">B1-B2 Orta</span>
+                <strong>Sherlock Holmes: A Scandal in Bohemia</strong>
+                <small>Arthur Conan Doyle — Zengin bağlamsal ifadeler ve deyimler</small>
+              </button>
+              <button class="sample-book-card" data-sample="advanced">
+                <span class="level-tag advanced">B2-C1 İleri</span>
+                <strong>The Time Machine (Selected Chapters)</strong>
+                <small>H.G. Wells — Bilim kurgu klasiği ve edebi kelimeler</small>
+              </button>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Center Reader Area -->
+      <main class="reader-container" id="readerContainer">
+        <!-- Welcome / Dropzone Screen -->
+        <div class="welcome-screen" id="welcomeScreen">
+          <div class="dropzone" id="dropzone">
+            <div class="dropzone-icon">📱📖</div>
+            <h2>İngilizce EPUB Kitabınızı Seçin</h2>
+            <p>
+              Okurken anlamını bilmediğiniz herhangi bir <strong>kelimeye dokunun</strong>;
+              kelimenin tek başına sözlük anlamı yerine <strong>tam o cümle içindeki anlamını</strong> ve cümlenin çevirisini anında görün.
+            </p>
+            <div class="welcome-actions">
+              <label for="epubFileInput" class="primary-btn large-btn">
+                📂 Cihazdan .epub Seç
+              </label>
+              <button id="trySampleBtn" class="secondary-btn large-btn">
+                ✨ Örnek Kitapla Hemen Dene
+              </button>
+            </div>
+            <div class="how-it-works">
+              <div class="step-pill">
+                <span class="step-num">1</span>
+                <span>EPUB dosyanızı açın</span>
+              </div>
+              <div class="step-pill">
+                <span class="step-num">2</span>
+                <span>Bilmediğiniz kelimeye dokunun</span>
+              </div>
+              <div class="step-pill">
+                <span class="step-num">3</span>
+                <span>Cümle bağlamındaki anlamını görün</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Book Content Surface -->
+        <article class="book-surface" id="bookSurface" hidden>
+          <div class="reading-tip-banner" id="readingTipBanner">
+            <span>💡 <strong>İpucu:</strong> Herhangi bir kelimeye dokunduğunuzda <em>cümle içindeki anlamı</em> anında açılır.</span>
+            <button id="dismissTipBtn" class="close-tip-btn" aria-label="İpucunu Kapat">✕</button>
+          </div>
+          <div class="chapter-content" id="chapterContent"></div>
+          <div class="chapter-footer-nav">
+            <button id="footerPrevBtn" class="secondary-btn">← Önceki</button>
+            <span id="footerChapterInfo" class="footer-chapter-title"></span>
+            <button id="footerNextBtn" class="primary-btn">Sonraki →</button>
+          </div>
+        </article>
+      </main>
+
+      <!-- Right Context Inspector Panel (Desktop) / Bottom Sheet (Mobile) -->
+      <aside class="context-panel" id="contextPanel" aria-live="polite">
+        <div class="sheet-drag-handle" id="sheetDragHandle" aria-hidden="true">
+          <span class="handle-bar"></span>
+        </div>
+        <div class="context-panel-header">
+          <div class="context-header-title">
+            <span class="sparkle-icon">🎯</span>
+            <h2>Bağlamsal Anlam</h2>
+          </div>
+          <div class="context-header-actions">
+            <span class="engine-badge" id="activeEngineBadge" title="Aktif Çeviri Motoru">Hızlı Bağlam</span>
+            <button id="closeContextSheetBtn" class="icon-btn mobile-close-sheet-btn" aria-label="Paneli Kapat" title="Kapat">✕</button>
+          </div>
+        </div>
+
+        <!-- Empty State before clicking a word (visible on desktop) -->
+        <div class="context-empty" id="contextEmptyState">
+          <div class="empty-illustration">👆</div>
+          <h3>Bir Kelimeye Dokunun</h3>
+          <p>
+            Metin içindeki herhangi bir İngilizce kelimeye dokunduğunuzda:
+          </p>
+          <ul class="feature-checklist">
+            <li>Kelimenin <strong>o cümledeki tam Türkçe karşılığı</strong></li>
+            <li>İçinde geçtiği <strong>cümlenin tam çevirisi</strong></li>
+            <li>Kelime türü, kök hali ve <strong>bağlam açıklaması</strong></li>
+            <li>Sesli <strong>İngilizce telaffuz</strong></li>
+          </ul>
+          <p class="small-note">burada görüntülenecektir.</p>
+        </div>
+
+        <!-- Active Word & Sentence Context Card -->
+        <div class="context-result" id="contextResultCard" hidden>
+          <!-- Clicked Word Header -->
+          <div class="word-header-card">
+            <div class="word-title-row">
+              <div>
+                <h3 class="selected-word" id="selectedWordText">word</h3>
+                <div class="word-submeta">
+                  <span class="phonetic-text" id="selectedWordPhonetic"></span>
+                  <span class="pos-tag" id="selectedWordPos" hidden></span>
+                  <span class="lemma-tag" id="selectedWordLemma" hidden></span>
+                </div>
+              </div>
+              <div class="word-audio-actions">
+                <button id="speakWordBtn" class="icon-btn audio-btn" title="Kelimeyi Seslendir">
+                  🔊
+                </button>
+                <button id="saveWordBtn" class="save-word-btn" title="Kelime Defterine Kaydet">
+                  <span>☆ Kaydet</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Primary Contextual Meaning Box -->
+            <div class="contextual-meaning-box">
+              <span class="box-label">BU CÜMLEDEKİ ANLAMI</span>
+              <div class="contextual-meaning-value" id="contextualMeaningText">
+                Analiz ediliyor...
+              </div>
+              <p class="grammar-note" id="grammarNoteText" hidden></p>
+            </div>
+          </div>
+
+          <!-- Sentence Context Comparison -->
+          <div class="sentence-context-card">
+            <div class="card-section-header">
+              <span>CÜMLE BAĞLAMI</span>
+              <button id="speakSentenceBtn" class="mini-btn" title="Tüm Cümleyi Seslendir">
+                🔊 Cümleyi Dinle
+              </button>
+            </div>
+            <blockquote class="original-sentence" id="originalSentenceHtml">
+              Sentence goes here.
+            </blockquote>
+            <div class="sentence-divider">
+              <span>↓ Türkçe Çevirisi</span>
+            </div>
+            <p class="translated-sentence" id="translatedSentenceText">
+              Cümle çevirisi yükleniyor...
+            </p>
+          </div>
+
+          <!-- Additional Meanings / Dictionary Info -->
+          <div class="dictionary-details-card" id="dictionaryDetailsCard" hidden>
+            <div class="card-section-header">
+              <span>DİĞER ANLAMLARI &amp; SÖZLÜK</span>
+            </div>
+            <div id="otherMeaningsList" class="other-meanings-list"></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Vocabulary & Flashcards Dialog -->
+  <dialog id="vocabDialog" class="modal-dialog large-modal">
+    <div class="modal-header">
+      <div>
+        <h2>🗂️ Kelime Defterim</h2>
+        <p class="modal-subtitle">Kaydettiğiniz kelimeler ve geçtikleri cümleler</p>
+      </div>
+      <div class="modal-header-actions">
+        <button id="toggleFlashcardModeBtn" class="secondary-btn">🎯 Kartlarla Test</button>
+        <button id="exportVocabBtn" class="secondary-btn" title="CSV / Anki formatında indir">⬇️ İndir</button>
+        <button id="closeVocabDialogBtn" class="icon-btn" aria-label="Kapat">✕</button>
+      </div>
+    </div>
+
+    <div class="modal-body">
+      <!-- List View -->
+      <div id="vocabListView">
+        <div class="vocab-list-grid" id="vocabListContainer"></div>
+      </div>
+
+      <!-- Interactive Flashcard Study View -->
+      <div id="flashcardStudyView" hidden>
+        <div class="flashcard-stage">
+          <div class="flashcard-counter" id="flashcardCounter">Kart 1 / 1</div>
+          <div class="flashcard" id="flashcardElement">
+            <div class="flashcard-front">
+              <span class="card-hint">Bu cümlede altı çizili kelimenin anlamı nedir?</span>
+              <h3 class="flashcard-word" id="fcWord">word</h3>
+              <blockquote class="flashcard-sentence" id="fcSentence"></blockquote>
+              <button id="flipCardBtn" class="primary-btn">Anlamı Göster 🔄</button>
+            </div>
+            <div class="flashcard-back" id="fcBack" hidden>
+              <div class="fc-answer-meaning" id="fcMeaning"></div>
+              <p class="fc-answer-translation" id="fcTranslation"></p>
+              <p class="fc-answer-note" id="fcNote"></p>
+            </div>
+          </div>
+          <div class="flashcard-controls">
+            <button id="prevCardBtn" class="secondary-btn">← Önceki</button>
+            <button id="speakCardWordBtn" class="secondary-btn">🔊 Dinle</button>
+            <button id="nextCardBtn" class="primary-btn">Sonraki →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Settings & Gemini API Key Dialog -->
+  <dialog id="settingsDialog" class="modal-dialog">
+    <div class="modal-header">
+      <div>
+        <h2>⚙️ Görünüm ve Çeviri Ayarları</h2>
+        <p class="modal-subtitle">Okuma deneyimini ve bağlam motorunu özelleştirin</p>
+      </div>
+      <button id="closeSettingsDialogBtn" class="icon-btn" aria-label="Kapat">✕</button>
+    </div>
+
+    <div class="modal-body settings-body">
+      <!-- Mobile Quick Appearance Settings inside Settings Modal too -->
+      <div class="setting-group">
+        <label class="setting-label">Okuma Teması ve Yazı Boyutu</label>
+        <div class="mobile-settings-appearance-row">
+          <div class="theme-pills-group">
+            <button type="button" class="theme-choice-btn" data-theme-val="paper">📄 Kağıt</button>
+            <button type="button" class="theme-choice-btn" data-theme-val="sepia">📜 Sepya</button>
+            <button type="button" class="theme-choice-btn" data-theme-val="dark">🌙 Gece</button>
+          </div>
+          <div class="font-size-Btns">
+            <button type="button" id="modalFontDecBtn" class="secondary-btn">A-</button>
+            <button type="button" id="modalFontIncBtn" class="secondary-btn">A+</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="setting-group">
+        <label for="geminiApiKeyInput" class="setting-label">
+          <span>✨ Google Gemini API Anahtarı (İsteğe Bağlı)</span>
+          <span class="recommended-pill">AI Bağlam</span>
+        </label>
+        <p class="setting-desc">
+          Uygulama <strong>API anahtarı olmadan da</strong> hızlı bağlam motoruyla anında çalışır.
+          İsterseniz ücretsiz bir <strong>Gemini API anahtarı</strong> girerek (<code>gemini-3.8-flash</code>)
+          deyimleri ve mecaz anlamları yapay zekâ ile analiz ettirebilirsiniz.
+        </p>
+        <div class="api-key-input-row">
+          <input
+            type="password"
+            id="geminiApiKeyInput"
+            class="text-input"
+            placeholder="AIzaSy... (Cihazınızda saklanır)"
+            autocomplete="off"
+          />
+          <button id="toggleKeyVisibilityBtn" class="secondary-btn" type="button">Göster</button>
+        </div>
+        <small class="setting-help">
+          Ücretsiz anahtar almak için: <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio</a>
+        </small>
+      </div>
+
+      <div class="setting-group">
+        <label for="fontFamilySelect" class="setting-label">Okuma Yazı Tipi (Font)</label>
+        <select id="fontFamilySelect" class="select-input">
+          <option value="'Literata', Georgia, serif">Literata (Kitap Serif - Önerilen)</option>
+          <option value="'Inter', system-ui, sans-serif">Inter (Modern Sans-Serif)</option>
+          <option value="Georgia, 'Times New Roman', serif">Georgia (Klasik Serif)</option>
+        </select>
+      </div>
+
+      <div class="setting-group">
+        <label for="speechRateSelect" class="setting-label">Sesli Telaffuz Hızı</label>
+        <select id="speechRateSelect" class="select-input">
+          <option value="0.75">0.75x (Öğrenme İçin Yavaş ve Net)</option>
+          <option value="0.9" selected>0.90x (Doğal Akıcı)</option>
+          <option value="1.0">1.00x (Normal Hız)</option>
+        </select>
+      </div>
+
+      <div class="modal-footer">
+        <button id="saveSettingsBtn" class="primary-btn">Ayarları Kaydet</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="js/storage.js?v=3"></script>
+  <script src="js/epub-parser.js?v=3"></script>
+  <script src="js/context-engine.js?v=3"></script>
+  <script src="js/app.js?v=3"></script>
+</body>
+</html>
