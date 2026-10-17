@@ -123,6 +123,16 @@
     saveSettingsBtn: document.getElementById('saveSettingsBtn'),
   };
 
+  function trackVercelEvent(eventName, eventData = {}) {
+    try {
+      if (typeof window.va === 'function') {
+        window.va('event', { name: eventName, data: eventData });
+      }
+    } catch {
+      // Ignore analytics errors
+    }
+  }
+
   function isMobileViewport() {
     return window.matchMedia('(max-width: 860px)').matches;
   }
@@ -346,6 +356,7 @@
         ...state.activeWordData,
         bookTitle: state.currentBook?.title || '',
       });
+      trackVercelEvent('word_saved', { word: state.activeWordData.word });
       updateVocabBadge();
       els.saveWordBtn.classList.add('saved');
       els.saveWordBtn.innerHTML = '<span>★ Kaydedildi</span>';
@@ -445,6 +456,7 @@
         buffer,
       });
 
+      trackVercelEvent('epub_uploaded', { title: parsedBook.title });
       await renderUserLibrary();
       loadBookObject(parsedBook);
       closeMobileSidebar();

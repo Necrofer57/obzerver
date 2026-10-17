@@ -1,0 +1,10 @@
+{
+  "name": "obzerver",
+  "version": "1.0.0",
+  "description": "Obzerver — Bağlam Odaklı Mobil İngilizce EPUB Okuyucu",
+  "private": true,
+  "dependencies": {
+    "@vercel/analytics": "^1.5.0",
+    "@vercel/speed-insights": "^1.2.0"
+  }
+}
